@@ -1,0 +1,55 @@
+{
+  "id": null,
+  "uid": "resolveiq-overview",
+  "title": "ResolveIQ Overview",
+  "tags": ["resolveiq", "local-demo"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP request rate by service",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "resolveiq-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum by (service_name) (rate(http_server_request_duration_seconds_count[1m]))", "legendFormat": "{{service_name}}", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "HTTP p95 latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "resolveiq-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(http_server_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service_name}}", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Redis memory used",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "resolveiq-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "redis_memory_used_bytes", "legendFormat": "used bytes", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "PostgreSQL connections",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "resolveiq-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "pg_stat_database_numbackends{datname=\"resolveiq\"}", "legendFormat": "{{datname}}", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "ResolveIQ application logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "resolveiq-loki" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+      "targets": [{ "expr": "{service_name=~\"Fulfillment\\\\.(Label|Config)Service\"}", "refId": "A" }]
+    }
+  ],
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "30s", "1m"] },
+  "annotations": { "list": [] }
+}

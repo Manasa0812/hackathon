@@ -1,0 +1,15 @@
+global:
+  resolve_timeout: 2m
+
+route:
+  receiver: resolveiq-mattermost
+  group_by: [alertname, service, severity]
+  group_wait: 3s
+  group_interval: 15s
+  repeat_interval: 30m
+
+receivers:
+  - name: resolveiq-mattermost
+    webhook_configs:
+      - url: http://alertmanager-mattermost-bridge:8080/alert
+        send_resolved: true

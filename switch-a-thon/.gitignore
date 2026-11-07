@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+secrets/
+.nuget/
+.nuget-cache/
+.packages/
+.buildx/
+.idea/
+**/bin/
+**/obj/
+**/.DS_Store

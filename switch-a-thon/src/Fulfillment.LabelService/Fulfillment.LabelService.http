@@ -1,0 +1,33 @@
+@LabelService = http://localhost:5082
+
+### Simulate label generation for a configured destination
+POST {{LabelService}}/labels
+Content-Type: application/json
+
+{
+  "carrierServiceType": "GROUND",
+  "originPostcode": "94105",
+  "destinationPostcode": "10001",
+  "originCountry": "US",
+  "destinationCountry": "US",
+  "weight": 2.5,
+  "length": 30,
+  "height": 20,
+  "width": 20
+}
+
+### No configured destination zone
+POST {{LabelService}}/labels
+Content-Type: application/json
+
+{
+  "carrierServiceType": "GROUND",
+  "originPostcode": "94105",
+  "destinationPostcode": "30301",
+  "originCountry": "US",
+  "destinationCountry": "US",
+  "weight": 2.5,
+  "length": 30,
+  "height": 20,
+  "width": 20
+}

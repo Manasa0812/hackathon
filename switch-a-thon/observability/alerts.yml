@@ -1,0 +1,45 @@
+groups:
+  - name: resolveiq-demo
+    rules:
+      - alert: ResolveIQHighHttp4xxRate
+        expr: sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"4.."}[10s])) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: ResolveIQ HTTP 4xx rate is above 10 requests per second over 10 seconds
+          description: Prometheus observed a sustained burst of client and business-rule rejections. Ask the investigator to correlate response codes with both services' logs and error metrics.
+
+      - alert: ResolveIQHighHttp5xxRate
+        expr: sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[10s])) > 1
+        labels:
+          severity: critical
+        annotations:
+          summary: ResolveIQ HTTP 5xx rate is above 1 request per second over 10 seconds
+          description: Prometheus observed sustained server-side failures. Ask the investigator to correlate both services' logs, dependencies, and infrastructure metrics.
+
+      - alert: ResolveIQServiceUnavailable
+        expr: up{job="otel-collector"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: ResolveIQ telemetry collector is unavailable
+          description: Prometheus cannot scrape the OpenTelemetry Collector.
+
+      - alert: ResolveIQRedisUnavailable
+        expr: redis_up == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: ResolveIQ Redis is unavailable
+          description: Redis exporter cannot read Redis health information.
+
+      - alert: ResolveIQPostgresUnavailable
+        expr: pg_up == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: ResolveIQ PostgreSQL is unavailable
+          description: PostgreSQL exporter cannot read PostgreSQL health information.

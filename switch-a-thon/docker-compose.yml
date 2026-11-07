@@ -1,0 +1,196 @@
+name: resolveiq
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: resolveiq
+      POSTGRES_USER: resolveiq
+      POSTGRES_PASSWORD: resolveiq_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - resolveiq-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resolveiq -d resolveiq"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - resolveiq-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis-seed:
+    image: redis:7-alpine
+    entrypoint: ["/bin/sh", "/scripts/seed.sh"]
+    environment:
+      REDIS_HOST: redis
+    volumes:
+      - ./redis/seed.sh:/scripts/seed.sh:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  postgres-observer-setup:
+    image: postgres:17-alpine
+    entrypoint: ["sh", "-c"]
+    command: ["until pg_isready -h postgres -U resolveiq -d resolveiq; do sleep 1; done; psql -h postgres -U resolveiq -d resolveiq -v ON_ERROR_STOP=1 -f /scripts/readonly-roles.sql"]
+    environment:
+      PGUSER: resolveiq
+      PGPASSWORD: resolveiq_dev
+      RESOLVEIQ_READONLY_PASSWORD: ${RESOLVEIQ_READONLY_PASSWORD:-resolveiq_reader_dev}
+      RESOLVEIQ_MONITOR_PASSWORD: ${RESOLVEIQ_MONITOR_PASSWORD:-resolveiq_monitor_dev}
+    volumes:
+      - ./postgres/readonly-roles.sql:/scripts/readonly-roles.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./observability/loki.yml:/etc/loki/local-config.yaml:ro
+      - resolveiq-loki:/loki
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - loki
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://resolveiq_monitor:${RESOLVEIQ_MONITOR_PASSWORD:-resolveiq_monitor_dev}@postgres:5432/resolveiq?sslmode=disable
+    depends_on:
+      postgres-observer-setup:
+        condition: service_completed_successfully
+
+  redis-exporter:
+    image: ghcr.io/oliver006/redis_exporter:v1.93.0-alpine
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - resolveiq-prometheus:/prometheus
+    depends_on:
+      - otel-collector
+      - postgres-exporter
+      - redis-exporter
+
+  alertmanager-mattermost-bridge:
+    image: python:3.12-alpine
+    command: ["python", "/app/bridge.py"]
+    volumes:
+      - ./scripts/alertmanager-mattermost-bridge.py:/app/bridge.py:ro
+      - ./secrets:/run/secrets:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: [alerts]
+    depends_on:
+      - alertmanager-mattermost-bridge
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./secrets:/run/secrets:ro
+      - resolveiq-alertmanager:/alertmanager
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${RESOLVEIQ_GRAFANA_PASSWORD:-resolveiq_grafana_dev}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - resolveiq-grafana:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+
+  configuration-service:
+    build:
+      context: .
+      dockerfile: src/Fulfillment.ConfigService/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRIC_EXPORT_INTERVAL: 1000
+      ConnectionStrings__ConfigurationDatabase: Host=postgres;Port=5432;Database=resolveiq;Username=resolveiq;Password=resolveiq_dev
+      Redis__Configuration: redis:6379
+    ports:
+      - "127.0.0.1:5081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-observer-setup:
+        condition: service_completed_successfully
+      redis-seed:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+
+  label-service:
+    build:
+      context: .
+      dockerfile: src/Fulfillment.LabelService/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRIC_EXPORT_INTERVAL: 1000
+      ConfigurationService__BaseUrl: http://configuration-service:8080/
+    ports:
+      - "127.0.0.1:5082:8080"
+    depends_on:
+      configuration-service:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
+volumes:
+  resolveiq-postgres:
+  resolveiq-redis:
+  resolveiq-loki:
+  resolveiq-prometheus:
+  resolveiq-alertmanager:
+  resolveiq-grafana:

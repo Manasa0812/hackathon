@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Fulfillment.ConfigService/Fulfillment.ConfigService.csproj" />
+    <Project Path="src/Fulfillment.LabelService/Fulfillment.LabelService.csproj" />
+    <Project Path="src/ResolveIQ.InvestigatorMcp/ResolveIQ.InvestigatorMcp.csproj" />
+  </Folder>
+</Solution>

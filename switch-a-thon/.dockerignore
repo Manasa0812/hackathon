@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.packages/
+.nuget-cache/
+.buildx/
+.git/
+.idea/
+.env
+.env.*
+!.env.example
+secrets/

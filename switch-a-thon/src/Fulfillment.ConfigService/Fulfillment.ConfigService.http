@@ -1,0 +1,17 @@
+@ConfigService = http://localhost:5081
+
+### Resolve a seeded zone
+GET {{ConfigService}}/zones?carrierServiceType=GROUND&originPostcode=94105&destinationPostcode=10001&originCountry=US&destinationCountry=US
+Accept: application/json
+
+### Retrieve the matching dimensional rate
+GET {{ConfigService}}/rates?carrierServiceType=GROUND&zone=US-WEST-TO-NORTHEAST&weight=2.5&length=30&height=20&width=20
+Accept: application/json
+
+### Zone-not-found case
+GET {{ConfigService}}/zones?carrierServiceType=GROUND&originPostcode=94105&destinationPostcode=30301&originCountry=US&destinationCountry=US
+Accept: application/json
+
+### Rate-not-found case: dimensions exceed the configured limit
+GET {{ConfigService}}/rates?carrierServiceType=GROUND&zone=US-WEST-TO-NORTHEAST&weight=2.5&length=150&height=20&width=20
+Accept: application/json
